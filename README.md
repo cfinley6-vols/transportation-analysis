@@ -328,3 +328,7 @@ The ER diagram (`ERD Diagram for Transit Analysis Database.png`) shows all six t
 | `queries.sql`, `transaction.sql`, `run_queries.sh` | Deliverable 4 files (updated for the new data) |
 | `ERD Diagram for Transit Analysis Database.png` | ER diagram |
 | `README.md` | This file |
+
+## 8. A Note About This Submission for Deliverable 5
+
+Earlier I did not realize this was due at 10:20AM and not 11:59PM, so I simply submitted my preliminary concept that I had working on Friday. This resubmission contains my basically finished and fleshed out concept.
