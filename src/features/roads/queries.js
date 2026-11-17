@@ -1,26 +1,13 @@
-// SQL for ROAD_SEGMENTS: streets between two intersections, with or without transit.
-// Each road is stored once, lower intersection ID first (the table's CHECK requires it).
+// SQL for ROAD_SEGMENTS: the street network. Each row is one block of one named
+// street between two intersections, stored once with the lower intersection ID
+// first (the table's CHECK requires it).
+
+import { INTERSECTION_NAME } from "../../db/sql-fragments.js";
 
 const ordered = (a, b) => (a < b ? [a, b] : [b, a]);
 
-export function listRoads(db) {
-  return db.prepare(
-    `SELECT RoadID AS ID, IntersectionA AS a, IntersectionB AS b
-       FROM ROAD_SEGMENTS
-      ORDER BY RoadID`,
-  ).all();
-}
-
-export function findRoad(db, roadId) {
-  return db.prepare("SELECT RoadID, IntersectionA, IntersectionB FROM ROAD_SEGMENTS WHERE RoadID = ?").get(roadId);
-}
-
-export function findRoadBetween(db, x, y) {
-  return db.prepare("SELECT RoadID FROM ROAD_SEGMENTS WHERE IntersectionA = ? AND IntersectionB = ?").get(...ordered(x, y));
-}
-
-/** Routes that already travel directly between the two intersections (consecutive stops, either direction). */
-export function routesBetween(db, x, y) {
+/** Names of the routes that travel this block (consecutive stops x, y in either direction). */
+export function routesOnRoad(db, x, y) {
   return db.prepare(
     `SELECT DISTINCT tr.RouteName
        FROM ROUTE_PATHWAYS here
@@ -33,9 +20,39 @@ export function routesBetween(db, x, y) {
   ).all(x, y, y, x).map((row) => row.RouteName);
 }
 
-export function insertRoad(db, x, y) {
+/** The roads at one intersection, each with the intersection at its other end. */
+export function roadsAt(db, intersectionId) {
+  return db.prepare(
+    `SELECT r.RoadID AS ID, r.StreetName AS Street, i.IntersectionID AS OtherID, ${INTERSECTION_NAME} AS Other
+       FROM ROAD_SEGMENTS r
+       JOIN INTERSECTIONS i
+         ON i.IntersectionID = CASE WHEN r.IntersectionA = ? THEN r.IntersectionB ELSE r.IntersectionA END
+      WHERE r.IntersectionA = ? OR r.IntersectionB = ?
+      ORDER BY r.StreetName, i.IntersectionID`,
+  ).all(intersectionId, intersectionId, intersectionId)
+    .map((road) => ({ ...road, Routes: routesOnRoad(db, intersectionId, road.OtherID) }));
+}
+
+export function listRoads(db) {
+  return db.prepare(
+    `SELECT RoadID AS ID, IntersectionA AS a, IntersectionB AS b, StreetName AS Street
+       FROM ROAD_SEGMENTS
+      ORDER BY RoadID`,
+  ).all();
+}
+
+export function findRoad(db, roadId) {
+  return db.prepare("SELECT RoadID, IntersectionA, IntersectionB, StreetName FROM ROAD_SEGMENTS WHERE RoadID = ?").get(roadId);
+}
+
+export function findRoadBetween(db, x, y) {
+  return db.prepare("SELECT RoadID FROM ROAD_SEGMENTS WHERE IntersectionA = ? AND IntersectionB = ?").get(...ordered(x, y));
+}
+
+export function insertRoad(db, x, y, street) {
   return Number(
-    db.prepare("INSERT INTO ROAD_SEGMENTS (IntersectionA, IntersectionB) VALUES (?, ?)").run(...ordered(x, y)).lastInsertRowid,
+    db.prepare("INSERT INTO ROAD_SEGMENTS (IntersectionA, IntersectionB, StreetName) VALUES (?, ?, ?)")
+      .run(...ordered(x, y), street).lastInsertRowid,
   );
 }
 

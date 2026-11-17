@@ -10,7 +10,7 @@ import { INTERSECTION_NAME, levelOfService } from "../../db/sql-fragments.js";
 export function intersectionsWithCongestion(db, timeBlockId) {
   return db.prepare(
     `SELECT i.IntersectionID AS ID, ${INTERSECTION_NAME} AS Name,
-            i.MainStreet, i.CrossStreet, i.ControlType, i.Neighborhood,
+            i.MainStreet, i.CrossStreet, i.ControlType, i.Neighborhood, i.MapX, i.MapY,
             COUNT(o.ObservationID) AS Readings,
             CAST(ROUND(AVG(o.VehicleVolume)) AS INTEGER) AS AvgVolume,
             ROUND(AVG(o.AvgWaitTimeSec), 1) AS AvgWaitSec,

@@ -1,10 +1,12 @@
 // A small live traffic simulation for the network map.
 //
-// Roads follow the real connections between intersections (the route
-// segments in ROUTE_PATHWAYS). Cars start their trips at intersections, drive
-// along lanes, queue behind each other, obey each intersection's control,
-// turn through it, and continue to another road, until they finish their
-// trip at an intersection and fade out.
+// Roads are the road segments between intersections. Where one of an
+// intersection's streets has no road segment there, a short "tail" shows that
+// street leading off the map; cars arrive and leave along it. Elsewhere cars
+// start their trips at intersections. They drive along lanes, queue behind
+// each other, obey each intersection's control, turn through it, and continue
+// to another road, until they leave by a tail or finish their trip at an
+// intersection and fade out.
 //
 // Database values for the selected time block drive the simulation:
 //   cars entering at an intersection  <- AvgVolume (none if it has no readings)
@@ -18,6 +20,7 @@ import { svgEl } from "../dom.js";
 
 const JUNCTION_RADIUS = 27;   // lanes start/stop this far from the center
 const LANE_OFFSET = 5;      // drive on the right of the center line
+export const TAIL_LENGTH = 70; // streets leading off the map
 const CAR_GAP = 13;           // bumper-to-bumper spacing in a queue
 const SPEED = 80;             // px per second
 const TURN_TIME = 0.45;       // seconds to cross an intersection
@@ -52,11 +55,14 @@ const place = (node, x, y, angle) =>
 // Road layout
 // ---------------------------------------------------------------------------
 
-function buildRoads(intersections, edges, positions) {
+/**
+ * @param tails [{ id, angle }]: a street leaving intersection `id` in direction `angle` (radians)
+ */
+function buildRoads(intersections, edges, positions, tails) {
   const nodes = new Map();
   for (const data of intersections) {
     const p = positions.get(data.ID);
-    if (p) nodes.set(data.ID, { data, p, inbound: [], outbound: [], lastEntry: -Infinity, rate: 0, credit: 0 });
+    if (p) nodes.set(data.ID, { data, p, inbound: [], outbound: [], sources: [], lastEntry: -Infinity, rate: 0, credit: 0 });
   }
   const lanes = [];
   const pavement = []; // road center lines to draw
@@ -90,6 +96,25 @@ function buildRoads(intersections, edges, positions) {
       add(add(u.p, dir, JUNCTION_RADIUS), rightOf(back), LANE_OFFSET), "road");
     forwardLane.reverse = backLane;
     backLane.reverse = forwardLane;
+  }
+
+  // Tails: cars enter the map on one lane (source) and leave on the other (sink).
+  for (const { id, angle } of tails) {
+    const node = nodes.get(id);
+    if (!node) continue;
+    const out = { x: Math.cos(angle), y: Math.sin(angle) };
+    const inward = { x: -out.x, y: -out.y };
+    const far = add(node.p, out, TAIL_LENGTH);
+    pavement.push({ a: node.p, b: far, tail: true });
+    const entering = addLane(null, node,
+      add(far, rightOf(inward), LANE_OFFSET),
+      add(add(node.p, out, JUNCTION_RADIUS), rightOf(inward), LANE_OFFSET), "source");
+    const leaving = addLane(node, null,
+      add(add(node.p, out, JUNCTION_RADIUS), rightOf(out), LANE_OFFSET),
+      add(far, rightOf(out), LANE_OFFSET), "sink");
+    entering.reverse = leaving;
+    leaving.reverse = entering;
+    node.sources.push(entering);
   }
   return { nodes, lanes, pavement };
 }
@@ -143,8 +168,8 @@ function controllerFor(node) {
 // ---------------------------------------------------------------------------
 
 export class TrafficSim {
-  constructor(intersections, edges, positions) {
-    const { nodes, lanes, pavement } = buildRoads(intersections, edges, positions);
+  constructor(intersections, edges, positions, tails = []) {
+    const { nodes, lanes, pavement } = buildRoads(intersections, edges, positions, tails);
     this.nodes = nodes;
     this.lanes = lanes;
     this.random = seededRandom(intersections.length * 7919 + edges.length * 104729);
@@ -231,12 +256,15 @@ export class TrafficSim {
     this.time += dt;
     const now = this.time;
 
-    // New trips start at intersections, onto one of their roads.
+    // New trips: cars arrive along an intersection's tail if it has one,
+    // otherwise they start at the intersection onto one of its roads.
     for (const node of this.nodes.values()) {
       if (node.rate === 0) continue;
       node.credit = Math.min(2, node.credit + node.rate * dt);
       if (node.credit < 1 || this.carCount >= MAX_CARS) continue;
-      const lane = node.outbound[Math.floor(this.random() * node.outbound.length)];
+      const pool = node.sources.length ? node.sources : node.outbound.filter((lane) => lane.kind === "road");
+      if (!pool.length) continue;
+      const lane = pool[Math.floor(this.random() * pool.length)];
       if (this.hasRoomAtStart(lane)) {
         this.addCar(lane);
         node.credit -= 1;
@@ -252,6 +280,11 @@ export class TrafficSim {
 
       const front = lane.cars[0];
       if (!front || front.s < lane.length - 0.5) continue;
+
+      if (lane.kind === "sink") { // left the map along a tail
+        this.removeCar(lane.cars.shift());
+        continue;
+      }
 
       // Waiting at the stop line: go when allowed and there is room ahead.
       front.wait += dt;
@@ -294,8 +327,11 @@ export class TrafficSim {
     for (const lane of this.lanes) {
       for (const car of lane.cars) {
         place(car.el, lane.start.x + lane.dir.x * car.s, lane.start.y + lane.dir.y * car.s, lane.angle);
-        // A car starting its trip fades in as it pulls away from the intersection.
-        car.el.setAttribute("opacity", car.fresh ? Math.min(1, 0.15 + car.s / 12).toFixed(2) : "1");
+        // Cars fade in as a trip starts and fade out as they leave the map along a tail.
+        let opacity = 1;
+        if (lane.kind === "sink") opacity = Math.min(1, (lane.length - car.s) / 14);
+        else if (car.fresh) opacity = Math.min(1, 0.15 + car.s / 12);
+        car.el.setAttribute("opacity", opacity.toFixed(2));
       }
       if (lane.signal) {
         const go = lane.toNode.controller.kind === "light" && lane.toNode.controller.isGreen(lane, this.time);

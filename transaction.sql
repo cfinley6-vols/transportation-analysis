@@ -10,15 +10,16 @@ BEGIN TRANSACTION;
 INSERT INTO TRANSIT_ROUTES (RouteName, TransitType, DailyCapacity) 
 VALUES ('Green Line Commuter', 'Bus', 1200);
 
--- 2. Add the sequence of stops for the newly created route (Assuming it gets RouteID = 5)
+-- 2. Add the sequence of stops for the newly created route (Assuming it gets RouteID = 5).
+--    The Green Line runs east along Oak St, so each stop shares a street with the one before it.
 INSERT INTO ROUTE_PATHWAYS (RouteID, IntersectionID, SequenceOrder, HasTransitStop) 
-VALUES (5, 6, 1, 1); -- Starts at Maple & Cedar
+VALUES (5, 13, 1, 1); -- Starts at Oak St & 1st Ave
 
 INSERT INTO ROUTE_PATHWAYS (RouteID, IntersectionID, SequenceOrder, HasTransitStop) 
-VALUES (5, 3, 2, 1); -- Stops at Oak & Pine
+VALUES (5, 14, 2, 1); -- Stops at Oak St & 2nd Ave
 
 INSERT INTO ROUTE_PATHWAYS (RouteID, IntersectionID, SequenceOrder, HasTransitStop) 
-VALUES (5, 2, 3, 1); -- Ends at Main & Elm
+VALUES (5, 15, 3, 1); -- Ends at Oak St & 3rd Ave
 
 -- Rolling back to preserve the original test state for grading purposes.
 ROLLBACK;

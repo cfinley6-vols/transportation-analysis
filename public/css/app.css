@@ -189,7 +189,8 @@ td.actions-col .btn + .btn { margin-left: 6px; }
 .map-host { position: relative; }
 .network-map { display: block; width: 100%; height: auto; user-select: none; }
 .network-map .land { fill: var(--land); }
-.network-map .hood-area { fill-opacity: var(--hood-opacity); pointer-events: none; }
+.network-map .hood-area { opacity: var(--hood-opacity); stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.network-map .street-name { paint-order: stroke; stroke: var(--land); stroke-width: 4px; stroke-linejoin: round; fill: var(--muted); font-size: 11.5px; font-weight: 600; font-style: italic; pointer-events: none; }
 .network-map .hood-name { paint-order: stroke; stroke: var(--land); stroke-width: 5px; stroke-linejoin: round; fill: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; pointer-events: none; opacity: 0.8; }
 
 /* Roads */
@@ -240,6 +241,10 @@ td.actions-col .btn + .btn { margin-left: 6px; }
 .network-map .route-ring { fill: none; stroke-width: 3; }
 .network-map .route-ring.pass { stroke-dasharray: 3 3; }
 .network-map .hub-ring { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 2 4; }
+.network-map .id-badge circle { fill: var(--surface); stroke: var(--border); stroke-width: 1.2; }
+.network-map .id-badge text { fill: var(--muted); font-size: 10.5px; font-weight: 700; }
+.network-map .node:hover .id-badge text, .network-map .node.selected .id-badge text { fill: var(--text); }
+.network-map .id-badge { pointer-events: none; }
 .network-map .seq-badge circle { fill: var(--accent); }
 .network-map .seq-badge text { fill: #fff; font-size: 11px; font-weight: 700; }
 .network-map.picking .node { cursor: pointer; }
@@ -259,6 +264,11 @@ td.actions-col .btn + .btn { margin-left: 6px; }
 .map-card .map-host { background: var(--land); }
 .transfer-map { margin-top: 14px; box-shadow: none; }
 .transfer-map .network-map { max-width: 760px; margin: 0 auto; }
+.toolbar-group { display: flex; align-items: center; gap: 8px; }
+.moving-mode .network-map .node { cursor: grab; }
+.network-map .node.moving { cursor: grabbing; }
+.network-map .node.moving .select-ring { stroke: var(--accent); stroke-width: 3.5; stroke-dasharray: 5 4; }
+.network-map .node.unplaced .select-ring { stroke: var(--muted); stroke-dasharray: 3 3; }
 .map-hint { font-size: 12px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--border); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); }
@@ -290,6 +300,12 @@ td.actions-col .btn + .btn { margin-left: 6px; }
 .route-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .route-list li { display: flex; align-items: center; gap: 8px; }
 .route-list li .badge { margin-left: auto; }
+.road-list li { gap: 4px 10px; flex-wrap: wrap; }
+.road-list li > span:first-child { flex: 1; min-width: 0; }
+.road-list .btn { margin-left: auto; white-space: nowrap; }
+.road-list .used-by { flex-basis: 100%; }
+.btn.danger-outline { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.btn.danger-outline:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .panel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 14px; }
 .stat { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }

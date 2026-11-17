@@ -1,7 +1,7 @@
 // Fixed pieces of SQL reused by several queries. These are constants written
 // here, never user input; user values always go through `?` placeholders.
 
-/** Display name of an intersection, e.g. "Broadway & 5th Ave" (table alias `i`). */
+/** Display name of an intersection, e.g. "Main St & 2nd Ave" (table alias `i`). */
 export const INTERSECTION_NAME = "i.MainStreet || ' & ' || i.CrossStreet";
 
 /**

@@ -22,7 +22,7 @@ INNER JOIN TRAFFIC_OBSERVATIONS to_obs
 
 -- Requirement 3: LEFT JOIN
 -- Lists all intersections and any matching traffic observations for the 'Late Night' block (TimeBlockID = 4).
--- Intersections with no late-night data (like Main & Elm) will appear with NULL observation values, highlighting gaps in our data collection.
+-- Intersections with no late-night data (like Main St & 3rd Ave, or the newly built Cedar Ln & Pine Ave) will appear with NULL observation values, highlighting gaps in our data collection.
 SELECT 
     i.MainStreet, 
     i.CrossStreet, 

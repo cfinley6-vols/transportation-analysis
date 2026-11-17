@@ -5,12 +5,13 @@ import { waitChart } from "./components/charts.js";
 import { badge, chip, swatch } from "./components/controls.js";
 import { el } from "./dom.js";
 import { fmt, levelClass, levelFor } from "./format.js";
-import { openAddObservation } from "./forms.js";
+import { openAddObservation, openDeleteIntersection, openRemoveRoad } from "./forms.js";
 import { routeColor, state } from "./state.js";
 
 /** Intersection profile: details, wait by time block, and routes through it. */
 export async function intersectionPanel(intersectionId) {
-  const { intersection: i, routes, time_blocks: timeBlocks } = await get(`/api/intersections/${intersectionId}`);
+  const profile = await get(`/api/intersections/${intersectionId}`);
+  const { intersection: i, routes, roads, time_blocks: timeBlocks } = profile;
   return el("div", { class: "profile" },
     el("h2", {}, i.Name),
     el("div", { class: "chips" },
@@ -32,6 +33,15 @@ export async function intersectionPanel(intersectionId) {
           badge(r.StopType, r.StopType === "Stop" ? "stop" : "pass"))))
       : el("p", { class: "muted" }, "No transit routes pass through here."),
 
+    el("h3", {}, "Roads from here"),
+    roads.length
+      ? el("ul", { class: "route-list road-list" }, roads.map((r) => el("li", {},
+          el("span", {}, el("b", {}, r.Street), ` to #${r.OtherID} ${r.Other}`),
+          r.Routes.length
+            ? el("span", { class: "muted small used-by", title: "Routes travel along roads, so this block stays while a route uses it." }, `Used by ${r.Routes.join(", ")}`)
+            : el("button", { type: "button", class: "btn small danger-outline", onclick: () => openRemoveRoad(r, i) }, "Remove"))))
+      : el("p", { class: "muted" }, "No roads yet. Switch the map to Connect and drag to another intersection on the same street to build one."),
+
     el("div", { class: "panel-actions" },
       el("button", { class: "btn primary", onclick: () => openAddObservation({ intersectionId: i.IntersectionID }) },
         "Record observation"),
@@ -41,7 +51,8 @@ export async function intersectionPanel(intersectionId) {
           state.observationFilter = { intersection: String(i.IntersectionID) };
           location.hash = "#observations";
         },
-      }, "View observations")));
+      }, "View observations"),
+      el("button", { class: "btn danger-outline", onclick: () => openDeleteIntersection(profile) }, "Delete intersection")));
 }
 
 /** Vertical line diagram of a route: stops as large dots, pass-throughs as small ones. */

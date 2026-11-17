@@ -10,6 +10,7 @@ export const state = {
   routes: [],           // for dropdowns and route colors
 
   mapTimeBlock: "",     // time block used to color the map ("" = all day)
+  mapDragMode: "connect", // what dragging an intersection does: "connect" or "move"
   mapSelection: null,   // { kind: "intersection" | "route", id }
   observationFilter: {},
   selectedRouteId: null,

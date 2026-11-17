@@ -8,12 +8,14 @@ import { el } from "../dom.js";
 import { notifyDataChanged } from "../events.js";
 import { NetworkMap } from "../map/network-map.js";
 import { emptyDraft, intersectionOptions, loadReferenceData, state } from "../state.js";
+import { sharedStreet } from "../streets.js";
 
 const TRANSIT_TYPES = ["Bus", "Light Rail", "Streetcar", "Van", "Subway"];
 
 export async function render(main) {
   const network = await get("/api/network");
   const draft = state.draftRoute;
+  const byId = new Map(network.intersections.map((n) => [n.ID, n]));
   const names = new Map(network.intersections.map((n) => [n.ID, n.Name]));
   draft.stops = draft.stops.filter((stop) => names.has(stop.id)); // drop intersections deleted meanwhile
 
@@ -31,7 +33,15 @@ export async function render(main) {
   function toggleStop(id) {
     const index = draft.stops.findIndex((stop) => stop.id === id);
     if (index >= 0) draft.stops.splice(index, 1);
-    else draft.stops.push({ id, stop: true });
+    else {
+      // Routes travel along streets, so each stop must share a street with the one before it.
+      const last = byId.get(draft.stops.at(-1)?.id), next = byId.get(id);
+      if (last && !sharedStreet(last, next)) {
+        toast(`${next.Name} isn't on the same street as ${last.Name}. Pick an intersection on ${last.MainStreet} or ${last.CrossStreet}.`, "error");
+        return;
+      }
+      draft.stops.push({ id, stop: true });
+    }
     redraw();
   }
 

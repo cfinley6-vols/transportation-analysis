@@ -33,6 +33,8 @@ export const API_ROUTES = [
   ["GET", "/api/intersections", intersections.searchIntersections],
   ["POST", "/api/intersections", intersections.addIntersection],
   ["GET", "/api/intersections/:id", intersections.intersectionProfile],
+  ["PUT", "/api/intersections/:id/position", intersections.moveIntersection],
+  ["DELETE", "/api/intersections/:id", intersections.deleteIntersection],
 
   // 1. Browse   3. Add   4. Update / delete
   ["GET", "/api/observations", observations.browseObservations],

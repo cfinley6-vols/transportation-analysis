@@ -9,6 +9,7 @@ import { el } from "./dom.js";
 import { notifyDataChanged } from "./events.js";
 import { todayIso } from "./format.js";
 import { emptyDraft, intersectionOptions, loadReferenceData, routeColor, state, timeBlockOptions } from "./state.js";
+import { sharedStreet } from "./streets.js";
 
 const numberInput = (name, { value, min, max }) =>
   el("input", { type: "number", name, value, min, max, inputmode: "numeric" });
@@ -103,13 +104,18 @@ export function openEditCapacity(route) {
 }
 
 /**
- * After dragging from one intersection to another on the map: build a plain
- * road between them (or remove the one that's there), extend a route that
- * ends at `from` (or starts at `to`) so it runs from -> to, or start
- * planning a new route with these two stops.
+ * After dragging from one intersection to another on the map: build a road
+ * between them (or remove the one that's there), extend a route that ends at
+ * `from` (or starts at `to`) so it runs from -> to, or start planning a new
+ * route with these two stops. All of these need the two to share a street.
  */
 export function openConnect(from, to, network) {
   const { routes, roads = [] } = network;
+  const street = sharedStreet(from, to);
+  if (!street) {
+    toast(`${from.Name} and ${to.Name} aren't on the same street, so they can't be connected directly.`, "error");
+    return;
+  }
   const ids = (route) => route.Path.map((p) => p.id);
   const road = roads.find((r) => (r.a === from.ID && r.b === to.ID) || (r.a === to.ID && r.b === from.ID));
   const extendable = routes.filter((route) => {
@@ -118,14 +124,16 @@ export function openConnect(from, to, network) {
   });
   const alreadyLinked = routes.filter((route) => ids(route).some((id, i, path) =>
     (id === from.ID && path[i + 1] === to.ID) || (id === to.ID && path[i + 1] === from.ID)));
-  const connected = road || alreadyLinked.length > 0;
 
   const choice = (value, label, meta, color) => el("label", { class: "choice" },
     el("input", { type: "radio", name: "choice", value }),
     color ? swatch(color) : "", el("span", {}, label), el("span", { class: "meta" }, meta));
 
-  const note = road ? `A road (#${road.ID}) already connects them.`
-    : alreadyLinked.length ? `Already connected by ${alreadyLinked.map((r) => r.Route).join(", ")}.` : "";
+  const note = [
+    `Both are on ${street}.`,
+    road ? `Road #${road.ID} already joins them.` : "",
+    alreadyLinked.length ? `${alreadyLinked.map((r) => r.Route).join(", ")} already runs between them.` : "",
+  ].filter(Boolean).join(" ");
   const stopBox = el("input", { type: "checkbox", name: "stop", checked: true });
   const stopRow = el("label", { class: "check" }, stopBox, "Passenger stop at the added intersection");
 
@@ -134,11 +142,12 @@ export function openConnect(from, to, network) {
     submitLabel: "Save",
     body: [
       recordList([["From", `#${from.ID} ${from.Name}`], ["To", `#${to.ID} ${to.Name}`]]),
-      note ? el("p", { class: "muted small connect-note" }, note) : "",
+      el("p", { class: "muted small connect-note" }, note),
       el("p", { class: "field-label connect-note" }, "What would you like to do?"),
       el("div", { class: "choice-list", onchange: (e) => { stopRow.hidden = /road/.test(e.target.form.choice.value); } },
-        road ? choice("remove-road", "Remove the road", "deletes road #" + road.ID)
-          : connected ? "" : choice("road", "Build a road", "for traffic; no transit route needed"),
+        // A road a route runs on stays (routes travel along roads).
+        road ? (alreadyLinked.length ? "" : choice("remove-road", "Remove the road", `deletes road #${road.ID}`))
+          : choice("road", `Build a road on ${street}`, "for traffic; no transit route needed"),
         extendable.map((route) => {
           const where = ids(route).at(-1) === from.ID ? `adds #${to.ID} at the end` : `adds #${from.ID} at the start`;
           return choice(route.ID, `Extend ${route.Route}`, where, routeColor(route.ID));
@@ -165,4 +174,44 @@ export function openConnect(from, to, network) {
   const first = document.querySelector('#dialog input[name="choice"]:not([value="remove-road"])');
   first.checked = true;
   stopRow.hidden = first.value === "road";
+}
+
+/** Remove one road (a block of a street) after confirming. */
+export function openRemoveRoad(road, from) {
+  openDialog({
+    title: `Remove road #${road.ID}?`,
+    submitLabel: "Remove road",
+    danger: true,
+    body: [
+      recordList([["Street", road.Street], ["From", `#${from.IntersectionID} ${from.Name}`], ["To", `#${road.OtherID} ${road.Other}`]]),
+      el("p", { class: "muted" }, "The block disappears from the map and cars stop using it. You can build it again later by dragging between the two intersections."),
+    ],
+    onSubmit: async () => afterChange(await del(`/api/roads/${road.ID}`)),
+  });
+}
+
+/** Delete an intersection after showing everything that goes with it. */
+export function openDeleteIntersection({ intersection: i, routes, roads, observation_count: observations }) {
+  const straight = [...new Set(roads.map((r) => r.Street))].filter((street) => roads.filter((r) => r.Street === street).length === 2);
+  openDialog({
+    title: `Delete ${i.Name}?`,
+    submitLabel: "Delete permanently",
+    danger: true,
+    body: [
+      recordList([
+        ["Intersection", `#${i.IntersectionID} ${i.Name}`],
+        ["Observations deleted", observations],
+        ["Roads removed", roads.length ? roads.map((r) => `${r.Street} to #${r.OtherID}`).join(", ") : "none"],
+        ["Routes shortened", routes.length ? routes.map((r) => r.Route).join(", ") : "none"],
+      ]),
+      straight.length
+        ? el("p", { class: "muted small" }, `${straight.join(" and ")} will still run straight through: the blocks on either side are joined into one.`)
+        : "",
+      routes.length
+        ? el("p", { class: "muted small" }, "Each route loses this stop and the later stops move up one place. If that would break a route (for example, this is where it turns), nothing is deleted and you'll see why.")
+        : "",
+      el("p", { class: "muted" }, "Everything happens in one transaction and cannot be undone."),
+    ],
+    onSubmit: async () => afterChange(await del(`/api/intersections/${i.IntersectionID}`), { reloadReference: true }),
+  });
 }

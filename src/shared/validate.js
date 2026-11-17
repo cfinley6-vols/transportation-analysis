@@ -27,6 +27,21 @@ export function integer(value, label, { field = null, min, max, required = true 
   return number;
 }
 
+/** A decimal number within [min, max] (e.g. a map position); null if optional and blank. */
+export function decimal(value, label, { field = null, min, max, required = true } = {}) {
+  if (isBlank(value)) {
+    if (required) throw new ValidationError(`${label} is required.`, field);
+    return null;
+  }
+  const number = typeof value === "number" ? value
+    : typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim()) ? Number(value.trim()) : NaN;
+  if (!Number.isFinite(number)) throw new ValidationError(`${label} must be a number.`, field);
+  if ((min !== undefined && number < min) || (max !== undefined && number > max)) {
+    throw new ValidationError(`${label} must be between ${min} and ${max}.`, field);
+  }
+  return number;
+}
+
 /** Trimmed text; null if optional and blank. */
 export function text(value, label, { field = null, required = true, maxLength = 60 } = {}) {
   if (isBlank(value)) {

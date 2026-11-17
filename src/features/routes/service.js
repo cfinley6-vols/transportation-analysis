@@ -4,7 +4,7 @@
 import { LIMITS } from "../../shared/constants.js";
 import { NotFoundError, ValidationError } from "../../shared/errors.js";
 import * as v from "../../shared/validate.js";
-import { requireIntersection } from "../intersections/service.js";
+import { requireIntersection, sharedStreet } from "../intersections/service.js";
 import * as queries from "./queries.js";
 
 function requireRoute(db, rawId, field = "id") {
@@ -36,6 +36,7 @@ function validateStops(db, rawStops) {
     throw new ValidationError("Add at least 2 intersections in travel order.", "stops");
   }
   const seen = new Set();
+  let previous = null;
   const stops = rawStops.map((raw, index) => {
     if (typeof raw !== "object" || raw === null) {
       throw new ValidationError(`Stop #${index + 1} is malformed.`, "stops");
@@ -45,6 +46,11 @@ function validateStops(db, rawStops) {
       throw new ValidationError(`${intersection.Name} appears on the route twice.`, "stops");
     }
     seen.add(intersection.IntersectionID);
+    if (previous && !sharedStreet(previous, intersection)) {
+      throw new ValidationError(
+        `${previous.Name} and ${intersection.Name} aren't on the same street. Add a stop where the route turns between them.`, "stops");
+    }
+    previous = intersection;
     return {
       intersectionId: intersection.IntersectionID,
       hasStop: v.boolean(raw.stop, `Stop type for #${index + 1}`, { field: "stops" }),
@@ -87,6 +93,9 @@ export function connectIntersections(db, input) {
   else {
     throw new ValidationError(
       `${route.RouteName} doesn't end at ${from.Name} or start at ${to.Name}, so it can't be extended between them.`, "id");
+  }
+  if (!sharedStreet(from, to)) {
+    throw new ValidationError(`${from.Name} and ${to.Name} aren't on the same street, so a route can't go directly between them.`, "to");
   }
   if (path.some((p) => p.IntersectionID === added.IntersectionID)) {
     throw new ValidationError(`${route.RouteName} already goes through ${added.Name}; a route can't visit an intersection twice.`, "id");

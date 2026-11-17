@@ -16,6 +16,9 @@ CREATE TABLE INTERSECTIONS (
     CrossStreet TEXT NOT NULL,
     ControlType TEXT CHECK(ControlType IN ('Traffic Light', 'Stop Sign', 'Uncontrolled', 'Roundabout')), -- Constraint 2: CHECK (Restricts to valid types)
     Neighborhood TEXT,
+    MapX REAL,                       -- Added in D5: position on the city map, in blocks (x grows east)
+    MapY REAL,                       -- Added in D5: (y grows south); both set or both empty
+    CHECK ((MapX IS NULL) = (MapY IS NULL)),
     UNIQUE (MainStreet, CrossStreet) -- Added in D5: prevents the same intersection being entered twice
 );
 
@@ -60,19 +63,47 @@ CREATE TABLE ROUTE_PATHWAYS (
     FOREIGN KEY (IntersectionID) REFERENCES INTERSECTIONS(IntersectionID) ON DELETE CASCADE
 );
 
--- Added in D5: streets connecting two intersections, whether or not a transit route uses them.
--- (Roads that a route travels are already implied by ROUTE_PATHWAYS.) A road is two-way, so
--- each pair is stored once with the lower ID first; the CHECK and UNIQUE together prevent
--- a road from an intersection to itself and the same road being stored twice (as A-B and B-A).
+-- Added in D5: the street network. Each row is one block of one named street, joining the two
+-- intersections at its ends (an intersection is where two streets cross, so both ends must be on
+-- StreetName). Routes travel along these segments. A road is two-way, so each pair is stored once
+-- with the lower ID first; the CHECK and UNIQUE together prevent a road from an intersection to
+-- itself and the same road being stored twice (as A-B and B-A).
 CREATE TABLE ROAD_SEGMENTS (
     RoadID INTEGER PRIMARY KEY AUTOINCREMENT,
     IntersectionA INTEGER NOT NULL,
     IntersectionB INTEGER NOT NULL,
+    StreetName TEXT NOT NULL,
     CHECK (IntersectionA < IntersectionB),
     UNIQUE (IntersectionA, IntersectionB),
     FOREIGN KEY (IntersectionA) REFERENCES INTERSECTIONS(IntersectionID) ON DELETE CASCADE,
     FOREIGN KEY (IntersectionB) REFERENCES INTERSECTIONS(IntersectionID) ON DELETE CASCADE
 );
+
+-- Added in D5: a road segment must lie on a street that both of its intersections are on.
+-- (A CHECK constraint cannot look up other tables, so triggers enforce this rule.)
+CREATE TRIGGER trg_road_on_shared_street
+BEFORE INSERT ON ROAD_SEGMENTS
+WHEN NOT EXISTS (
+    SELECT 1 FROM INTERSECTIONS a, INTERSECTIONS b
+     WHERE a.IntersectionID = NEW.IntersectionA AND b.IntersectionID = NEW.IntersectionB
+       AND NEW.StreetName COLLATE NOCASE IN (a.MainStreet, a.CrossStreet)
+       AND NEW.StreetName COLLATE NOCASE IN (b.MainStreet, b.CrossStreet)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'A road segment must lie on a street shared by both of its intersections');
+END;
+
+CREATE TRIGGER trg_road_on_shared_street_update
+BEFORE UPDATE OF IntersectionA, IntersectionB, StreetName ON ROAD_SEGMENTS
+WHEN NOT EXISTS (
+    SELECT 1 FROM INTERSECTIONS a, INTERSECTIONS b
+     WHERE a.IntersectionID = NEW.IntersectionA AND b.IntersectionID = NEW.IntersectionB
+       AND NEW.StreetName COLLATE NOCASE IN (a.MainStreet, a.CrossStreet)
+       AND NEW.StreetName COLLATE NOCASE IN (b.MainStreet, b.CrossStreet)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'A road segment must lie on a street shared by both of its intersections');
+END;
 
 CREATE INDEX idx_observation_lookup ON TRAFFIC_OBSERVATIONS(IntersectionID, ObservationDate);
 

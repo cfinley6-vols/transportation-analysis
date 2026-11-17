@@ -1,10 +1,11 @@
 // Network map screen: the whole system at a glance (related data from
 // several joined tables). Click an intersection or route for details.
 
-import { get } from "../api.js";
+import { get, put } from "../api.js";
 import { levelLegend } from "../components/charts.js";
 import { chip, ringIcon, segmented, stat, swatch, toast, viewHeader } from "../components/controls.js";
 import { el } from "../dom.js";
+import { notifyDataChanged } from "../events.js";
 import { LOS_DESCRIPTION, fmt } from "../format.js";
 import { openAddIntersection, openAddObservation, openConnect } from "../forms.js";
 import { isPlaying, setPlaying } from "../map/clock.js";
@@ -20,7 +21,35 @@ export async function render(main) {
     onNodeClick: (n) => select({ kind: "intersection", id: n.ID }),
     onBackground: () => select(null),
     onConnect: (from, to) => openConnect(from, to, network),
+    onMove: async (n, { x, y }) => {
+      try {
+        const result = await put(`/api/intersections/${n.ID}/position`, { x, y });
+        toast(result.message);
+        notifyDataChanged();
+      } catch (err) {
+        toast(err.message, "error");
+        throw err; // the map puts the intersection back
+      }
+    },
   });
+  map.set({ dragMode: state.mapDragMode });
+
+  const HINTS = {
+    connect: "drag from one intersection to another on the same street to build a road or extend a route",
+    move: "drag an intersection to a new spot on the map; its position is saved when you let go",
+  };
+  const hint = el("div", { class: "map-hint" });
+  const showHint = () => {
+    hint.textContent = `Live view of the selected time of day · hover an intersection for its numbers · click to open · ${HINTS[state.mapDragMode]}`;
+  };
+  showHint();
+  const dragControl = segmented([["connect", "Connect"], ["move", "Move"]], state.mapDragMode, (mode) => {
+    state.mapDragMode = mode;
+    map.set({ dragMode: mode });
+    host.classList.toggle("moving-mode", mode === "move");
+    showHint();
+  }, "What dragging an intersection does");
+  host.classList.toggle("moving-mode", state.mapDragMode === "move");
 
   async function select(selection) {
     state.mapSelection = selection;
@@ -56,7 +85,7 @@ export async function render(main) {
         LOS_DESCRIPTION),
       el("h3", {}, "What's moving"),
       el("ul", { class: "key-list" },
-        el("li", {}, el("b", {}, "Cars"), " start trips at each intersection at a rate set by its average vehicle volume."),
+        el("li", {}, el("b", {}, "Cars"), " start trips at each intersection at a rate set by its average vehicle volume. Where a street has no road yet, a short tail shows it leading off the map, and cars arrive and leave along it."),
         el("li", {}, el("b", {}, "Signals"), " follow the control type; longer average waits mean longer reds, so queues build up."),
         el("li", {}, el("b", {}, "Buses, trams, vans"), " run each route, pause at passenger stops, and are held longer at congested intersections. More daily capacity puts more vehicles in service.")),
       el("h3", {}, "Highlighted route"),
@@ -113,10 +142,11 @@ export async function render(main) {
     el("div", { class: "split" },
       el("section", { class: "card map-card" },
         el("div", { class: "map-toolbar" },
-          el("span", { class: "field-label" }, "Traffic for"), timeBlockControl, motionButton),
+          el("span", { class: "field-label" }, "Traffic for"), timeBlockControl,
+          el("span", { class: "toolbar-group" }, el("span", { class: "field-label" }, "Drag to"), dragControl),
+          motionButton),
         host,
-        el("div", { class: "map-hint" },
-          "Live view of the selected time of day · hover an intersection for its numbers · click to open · drag from one intersection to another to connect them")),
+        hint),
       panel));
 
   map.setData(network);
