@@ -1,9 +1,34 @@
-# Deliverable 5: Application
-## Project: Transit Analysis Database
+# Transit Analysis Database
+### COSC 465 Final Project (Deliverable 6)
 
-An interactive, visual web application for city transit planners, set in a hypothetical city laid out on a street grid. It shows the city's streets, transit routes, and traffic as a live, animated map. You can search intersections, record and correct traffic observations, view routes, run congestion reports, build roads, and plan new routes, all without typing SQL.
+## Project overview
+
+**What it does.** Transit Analysis is a database and web application for studying traffic congestion and transit service in a city. It stores the city's intersections, the streets that join them, its transit routes, and traffic counts taken at each intersection during different times of day. The application shows all of this on an interactive, animated city map. Users can search and browse the data, record and correct traffic observations, run congestion reports, and change the street and transit network, all without writing SQL.
+
+**Who it is for.** City transit and traffic planners who need to answer questions such as *Which intersections are the most congested, and when? Which bus and tram stops are slowed down by traffic? Where do two routes meet for transfers? What happens if we add a road or a new route?*
+
+**Major functionality**
+- An interactive network map of intersections, roads, and routes, colored by congestion (level of service A–F) for the selected time of day
+- Searching and filtering intersections and traffic observations
+- Adding, editing, and deleting traffic observations
+- Adding, moving, and deleting intersections; building and removing roads
+- Planning and launching new transit routes, extending existing routes, and changing route capacity
+- Reports: intersection congestion, traffic by time of day, and transit stop bottlenecks (charts and tables)
+- Finding transfer points shared by two routes
+
+The sample data describes a small, hypothetical city on a street grid (see [Section 4](#4-the-data-a-hypothetical-city)).
 
 **Architecture:** web page (HTML/CSS/JavaScript) → Node.js server (JavaScript) → SQLite database
+
+---
+
+## DBMS
+
+**SQLite 3** (a local, file-based relational database). No hosted database service is used, and the database server needs no account, username, or password.
+
+- The **application** reaches SQLite through Node.js's built-in `node:sqlite` module, so nothing needs to be installed for it.
+- The **SQL files** can also be run by hand with the `sqlite3` command-line tool (preinstalled on macOS; on Windows or Linux, download it from https://sqlite.org/download.html or install the `sqlite3` package).
+- SQLite-specific notes: foreign keys are only enforced when `PRAGMA foreign_keys = ON` is set for a connection. `schema.sql` sets it, and the application sets it on every connection. Booleans are stored as `0`/`1`, and dates and times as text (`YYYY-MM-DD`, `HH:MM`).
 
 ---
 
@@ -11,10 +36,11 @@ An interactive, visual web application for city transit planners, set in a hypot
 
 | Item | Details |
 |---|---|
-| Language | JavaScript (Node.js for the server, plain JavaScript in the browser) |
+| Language | **JavaScript** (Node.js for the server, plain JavaScript in the browser) |
 | Node.js | **Version 22.13 or newer** (tested with Node 24). Download the LTS version from https://nodejs.org/ |
 | Database | SQLite, through Node's built-in `node:sqlite` module |
-| Packages | **None.** The app uses only Node's built-in modules, so `npm install` is not needed. |
+| Packages | **None.** The app uses only Node's built-in modules, so `npm install` is not needed (running it is harmless). |
+| Optional | The `sqlite3` command-line tool, to run `queries.sql` and `transaction.sql` with `./run_queries.sh` |
 | Browser | Any current version of Chrome, Firefox, Safari, or Edge |
 | OS | macOS, Linux, or Windows |
 
@@ -27,9 +53,24 @@ node --version
 
 ## 2. Setup and running
 
-Run all commands from the project folder (the folder that contains `package.json`).
+Get the code, then run every command from the project folder (the folder that contains `package.json`):
+```
+git clone https://github.com/cfinley6-vols/transportation-analysis.git
+cd transportation-analysis
+```
 
-**Step 1: Create the database** from the submitted SQL files:
+### Step 1: Create the database
+
+The database file (`transit.db`) is **not** stored in the repository. It is built from the SQL files. The SQL files must run in this order:
+
+| Order | File | What it does |
+|---|---|---|
+| 1 | `schema.sql` | Drops any old objects, then creates the 6 tables, constraints, 2 triggers, the index, and the view |
+| 2 | `insert_data.sql` | Loads the sample data |
+| 3 | `queries.sql` | (Optional) Runs the 9 required queries. Read-only. |
+| 4 | `transaction.sql` | (Optional) Runs the transaction example. It ends in `ROLLBACK`, so it leaves the data unchanged. |
+
+**Option A (recommended): use the setup script.** It needs only Node.js:
 ```
 npm run setup
 ```
@@ -42,11 +83,23 @@ This deletes any existing `transit.db`, then rebuilds it by running `schema.sql`
   ROAD_SEGMENTS           29 rows
   TRAFFIC_OBSERVATIONS   130 rows
 ```
-Run it again at any time to reset the data to its original state.
+Run it again at any time to reset the data to its original state. (Node may print `.env not found. Continuing without it.` This is normal when you haven't created a `.env` file.)
 
-(Another option: the Deliverable 4 script `./run_queries.sh` also rebuilds `transit.db` with the `sqlite3` command-line tool and runs the D4 queries.)
+**Option B: run everything with the `sqlite3` command-line tool** (macOS/Linux, or Git Bash on Windows):
+```
+./run_queries.sh
+```
+This rebuilds `transit.db` from `schema.sql` and `insert_data.sql`, then runs `queries.sql` and `transaction.sql` and prints their results.
 
-**Step 2: Start the application:**
+**Option C: by hand,** in the same order:
+```
+sqlite3 transit.db < schema.sql
+sqlite3 transit.db < insert_data.sql
+sqlite3 -header -column transit.db < queries.sql
+sqlite3 -header -column transit.db < transaction.sql
+```
+
+### Step 2: Start the application
 ```
 npm start
 ```
@@ -61,22 +114,32 @@ npm start -- --no-browser       # don't open a browser automatically
 > Node marks `node:sqlite` as "experimental" and normally prints a warning about it. The npm scripts turn that warning off. If you run `node src/server/index.js` directly, the warning appears but is harmless.
 
 ### Database connection configuration
-SQLite is a local file, so the app needs no server, username, or password. By default it uses `transit.db` in the project folder. To use a different file, set an environment variable before starting the app:
-```
-TRANSIT_DB_PATH=/path/to/other.db npm start                 # macOS / Linux
-set TRANSIT_DB_PATH=C:\path\to\other.db && npm start         # Windows cmd
-```
-These settings live in `src/config.js`. Each connection turns on `PRAGMA foreign_keys = ON` so that foreign keys are enforced. Each request to the server opens its own connection and closes it when the request finishes.
+SQLite is a local file, so there is **no server, username, password, or connection string**, and the repository contains no secrets. By default the app uses `transit.db` in the project folder, and it works with no configuration at all.
 
-Optional: set `TRANSIT_DEBUG=1` to log raw database errors in the terminal. They are never sent to the browser.
+To change a setting, copy the template and edit it:
+```
+cp .env.example .env          # macOS / Linux
+copy .env.example .env        # Windows cmd
+```
+`npm start` and `npm run setup` read `.env` automatically. The settings are:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `PORT` | `8000` | Port the web server listens on |
+| `TRANSIT_DB_PATH` | `./transit.db` | Path to the SQLite database file |
+| `TRANSIT_DEBUG` | `0` | `1` logs raw database errors in the terminal. They are never sent to the browser. |
+
+You can also set them for a single run instead, for example `TRANSIT_DB_PATH=/path/to/other.db npm start` (macOS/Linux). `.env` is listed in `.gitignore`, so it is never committed.
+
+The settings are read in `src/config.js`. Each connection turns on `PRAGMA foreign_keys = ON` so that foreign keys are enforced. Each request to the server opens its own connection and closes it when the request finishes.
 
 ---
 
-## 3. Using the application
+## 3. Using the application (major operations)
 
 The sidebar has six screens. Every screen lists its main SQL techniques as small tags under the title.
 
-### Required operations and where to find them
+### Major operations and where to find them
 
 | # | Required category | Where in the app | Database technique |
 |---|---|---|---|
@@ -283,7 +346,7 @@ Stack traces and raw SQLite errors are never sent to the browser. If the server 
 
 ---
 
-## 6. Database changes since Deliverable 4
+## 6. Database changes since Deliverable 4 (made in Deliverable 5)
 
 **Data:** `insert_data.sql` now describes a larger, consistent city (Section 4). In the Deliverable 4 data, routes jumped between intersections that shared no street. Now every route runs along named streets.
 
@@ -293,7 +356,7 @@ Stack traces and raw SQLite errors are never sent to the browser. If the server 
 
 **New triggers** `trg_road_on_shared_street` (before insert) and `trg_road_on_shared_street_update` (before update): they reject a road segment unless its `StreetName` is one of the two streets of *both* of its intersections. A `CHECK` constraint can only see the row being saved, and this rule needs to look up `INTERSECTIONS`, so a trigger enforces it in the database itself.
 
-The ER diagram (`ERD Diagram for Transit Analysis Database.png`) shows all six tables, including `ROAD_SEGMENTS` with its two relationships to `INTERSECTIONS`, and the new map columns.
+The ER diagram (`erd.png`) shows all six tables, including `ROAD_SEGMENTS` with its two relationships to `INTERSECTIONS`, and the new map columns.
 
 **New constraints** (also marked `-- Added in D5`). These let the database reject duplicate and invalid data that the application could otherwise insert:
 
@@ -315,20 +378,44 @@ The ER diagram (`ERD Diagram for Transit Analysis Database.png`) shows all six t
 
 ---
 
-## 7. Files submitted
+### Changes in Deliverable 6
+- `transaction.sql` no longer assumes the new route gets `RouteID = 5`. It looks the ID up by the (unique) route name, so it works even after routes have been added through the app. It also prints the inserted stops before the `ROLLBACK` and confirms afterwards that the route is gone.
+- `transit.db` is no longer stored in the repository. It is built from the SQL files with `npm run setup`.
+- Added `.env.example` (configuration template) and renamed the ER diagram to `erd.png`.
+- No changes to the tables, constraints, triggers, view, or index.
+
+---
+
+## 7. Known limitations
+
+- **Node.js 22.13 or newer is required.** The app uses Node's built-in `node:sqlite` module, which Node still labels *experimental*. If Node is too old, the app stops with a message saying so.
+- **Single-user, local application.** There are no user accounts or logins, and the server only listens on this computer (`127.0.0.1`). Anyone who can open the page can change the data.
+- **Sample data is hypothetical.** The city, routes, and traffic counts are invented for demonstration (two days of readings, October 20–21, 2026).
+- **The moving traffic is a simulation.** The cars and transit vehicles on the map are generated from the stored averages for display. They are not real vehicle positions and are never saved.
+- **Time blocks are fixed.** The four time blocks come from `insert_data.sql`. The app has no screen for adding or editing them.
+- **Some SQL in `queries.sql` uses fixed IDs** from the sample data (for example, the `INTERSECT` query compares routes 1 and 2, and the `LEFT JOIN` uses time block 4). These return the documented results on a freshly loaded database.
+- **Changes made in the app are permanent** until `npm run setup` is run again, which resets the whole database to the sample data.
+
+Other than these, there are no known problems.
+
+---
+
+## 8. Files in the repository
 
 | File | Purpose |
 |---|---|
-| `package.json` | Project info and the npm commands |
+| `README.md` | This file |
+| `erd.png` | Final ER diagram (all six tables) |
+| `Design Notes for Transit Analysis Database.pdf` | Design notes from earlier deliverables |
+| `schema.sql` | Tables, constraints, triggers, view, and index (run first) |
+| `insert_data.sql` | Sample data for the hypothetical city (run second) |
+| `queries.sql` | The 9 required SQL queries |
+| `transaction.sql` | Transaction example (adds a route and its stops, then rolls back) |
+| `run_queries.sh` | Rebuilds the database and runs all SQL files with the `sqlite3` tool |
+| `package.json` | Project info and the npm commands (`setup`, `start`); no dependencies |
+| `.env.example` | Configuration template (no secrets) |
+| `scripts/setup-db.js` | Database setup script used by `npm run setup` |
 | `src/` | Server source code (Node.js) |
 | `public/` | Web page source code (HTML, CSS, browser JavaScript) |
-| `scripts/setup-db.js` | Database setup script |
-| `schema.sql` | Tables, constraints, view, index (updated for D5) |
-| `insert_data.sql` | Sample data for the hypothetical city (Section 4) |
-| `queries.sql`, `transaction.sql`, `run_queries.sh` | Deliverable 4 files (updated for the new data) |
-| `ERD Diagram for Transit Analysis Database.png` | ER diagram |
-| `README.md` | This file |
-
-## 8. A Note About This Submission for Deliverable 5
-
-Earlier I did not realize this was due at 10:20AM and not 11:59PM, so I simply submitted my preliminary concept that I had working on Friday. This resubmission contains my basically finished and fleshed out concept.
+| `.gitignore` | Keeps `transit.db`, `.env`, and system files out of the repository |
+| `LICENSE` | License |

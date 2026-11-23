@@ -157,3 +157,9 @@ vite.config.ts.timestamp-*
 .nx/migrate-runs
 
 .DS_Store
+
+# Local environment settings (copy from .env.example)
+.env
+
+# Generated database file (rebuild with: npm run setup)
+transit.db

@@ -19,7 +19,7 @@ sqlite3 -header -column "$DB" < queries.sql
 echo
 echo "Running transaction..."
 # Run transaction.sql
-sqlite3 -bail "$DB" < transaction.sql
+sqlite3 -bail -header -column "$DB" < transaction.sql
 status=$?
 
 if [ "$status" -eq 0 ]; then
